@@ -10,7 +10,19 @@ export interface Order {
   discount: number;
   orderDate: string;
   status: string | null;
-  cartItems: { name: string; image: string }[];
+  cartItems: {
+    _id?: string;
+    _key?: string;
+    name: string;
+    image?: {
+      asset: {
+        _id?: string;
+        url?: string;
+      };
+    };
+    quantity: number;
+    price: number;
+  }[];
 }
 
 
@@ -22,7 +34,7 @@ export interface Product {
   category: string;
   sizes: string[];
   description?: string;
-  variants?: Variant[];
+  variants: Variant[];
 }
 
 export interface Variant {

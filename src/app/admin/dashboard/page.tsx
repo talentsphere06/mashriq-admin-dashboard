@@ -6,6 +6,7 @@ import { urlFor } from "@/sanity/lib/image";
 import { Order, Product, Variant } from "@/sanity/lib/types"; 
 import { SignedIn, SignOutButton, useUser } from "@clerk/nextjs";
 import { round } from "lodash";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import Swal from "sweetalert2";
@@ -14,6 +15,7 @@ interface NewProduct extends Omit<Product, "variants" | "slug" | "_id"> {
     _id: string; 
     slug?: { current: string; _type: 'slug' };
     category: string;
+    categoryManual?: string;
     sizes: string[];
 }
 
@@ -39,13 +41,14 @@ const AdminDashboard = () => {
     const [isEditing, setIsEditing] = useState(false);
     
     const [newProduct, setNewProduct] = useState<NewProduct>({
-        _id: "",
-        name: "",
-        price: 0,
-        stock: 0,
-        description: "",
-        category: "Clothing",
-        sizes: [],
+    _id: "",
+    name: "",
+    price: 0,
+    stock: 0,
+    description: "",
+    category: "Mashriq Wear",
+    categoryManual: "",
+    sizes: [],
     });
 
     const [newVariants, setNewVariants] = useState<NewVariant[]>([]);
@@ -58,7 +61,7 @@ const AdminDashboard = () => {
     
     const availableColors = ["white", "red", "blue", "black", "yellow", "brown", "orange", "purple", "green"];
     const availableSizes = ["xs", "s", "m", "l", "xl"];
-    const availableCategories = ["Clothing", "Accessories", "Footwear"]; 
+    const availableCategories = ["Mashriq Wear", "Gul Ahmed", "Maria B"]; 
 
     const totalEarnings = useMemo(() => orders.reduce((sum, order) => sum + round(order.total, 2), 0), [orders]);
     const totalOrders = orders.length;
@@ -215,12 +218,10 @@ const AdminDashboard = () => {
         try {
             await Promise.all(newVariants.map(async (variant) => {
                 let imageAssetRef = null;
-                
                 if (variant.imageFile) {
                     const uploadedAsset = await client.assets.upload('image', variant.imageFile);
                     imageAssetRef = uploadedAsset._id;
                 }
-
                 if (imageAssetRef) {
                     variantsToCreate.push({
                         _type: "variant",
@@ -235,6 +236,11 @@ const AdminDashboard = () => {
                 }
             }));
 
+            let categoryValue = newProduct.category;
+            if (categoryValue === "other" && newProduct.categoryManual) {
+                categoryValue = newProduct.categoryManual;
+            }
+
             const doc: any = {
                 _type: 'product',
                 name: newProduct.name,
@@ -242,18 +248,17 @@ const AdminDashboard = () => {
                 stock: Number(newProduct.stock),
                 description: newProduct.description,
                 slug: createSlug(newProduct.name),
-                category: newProduct.category,
+                category: categoryValue,
                 sizes: newProduct.sizes,
                 variants: variantsToCreate.length > 0 ? variantsToCreate : undefined 
             };
-            
+
             await client.create(doc);
-            
             await fetchData(); 
-            setNewProduct({ _id: "", name: "", price: 0, stock: 0, description: "", category: "Clothing", sizes: [] });
+            setNewProduct({ _id: "", name: "", price: 0, stock: 0, description: "", category: "Mashriq Wear", categoryManual: "", sizes: [] });
             setNewVariants([]);
             setCurrentVariant({ color: availableColors[0], imageFile: null });
-            
+
             Swal.close();
             Swal.fire("Success!", "Product added successfully with variants.", "success");
         } catch (error) {
@@ -274,13 +279,20 @@ const AdminDashboard = () => {
             confirmButtonText: "Yes, delete it!"
         });
 
-        if (!result.isConfirmed) return
+        if (!result.isConfirmed) return;
 
+        Swal.fire({
+            title: "Deleting...",
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading(),
+        });
         try {
             await client.delete(productId);
             setProducts((prevProducts) => prevProducts.filter((p) => p._id !== productId));
+            Swal.close();
             Swal.fire("Deleted!", "Product has been deleted.", "success");
         } catch (error) {
+            Swal.close();
             Swal.fire("Error!", "Failed to delete product.", "error");
             console.error("Delete product error:", error);
         }
@@ -318,7 +330,7 @@ const AdminDashboard = () => {
     };
 
 
-    const selectedOrderDetails = orders.find((o) => o._id === selectedOrderId);
+    const selectedOrderDetails: Order | undefined = orders.find((o) => o._id === selectedOrderId);
     const getProductImageUrl = (product: Product): string | null => {
         const asset = product.variants?.[0]?.images?.[0]?.asset;
         return asset?.url || null;
@@ -472,20 +484,19 @@ const AdminDashboard = () => {
                                     </table>
                                 </div>
                             )}
-
                             {selectedOrderId && selectedOrderDetails && (
                                 <div className="mt-8 bg-white p-6 rounded-xl shadow-lg">
-                                    <h2 className="text-2xl font-semibold text-gray-800 mb-6">Items in Order ID: {selectedOrderDetails._id}</h2>
+                                    <h2 className="text-2xl font-semibold text-gray-800 mb-6">Order ID: {selectedOrderDetails._id}</h2>
                                     <p className="mb-4 text-gray-600">Address: {selectedOrderDetails.address}, {selectedOrderDetails.city}, {selectedOrderDetails.zipCode}</p>
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                                        {selectedOrderDetails.cartItems?.map((item: any, index: number) => (
+                                        {selectedOrderDetails.cartItems.map((item, index) => (
                                             <div
-                                                key={item._key || index}
+                                                key={item._id || item._key || index}
                                                 className="flex flex-col items-center p-4 border rounded-lg hover:shadow-md transition-shadow duration-200"
                                             >
                                                 {item.image?.asset?.url ? (
-                                                    <img
-                                                        src={urlFor(item.image).width(96).height(96).url()}
+                                                    <Image
+                                                        src={item.image.asset.url}
                                                         alt={item.name}
                                                         className="w-24 h-24 object-cover rounded-lg mb-4"
                                                     />
@@ -493,7 +504,7 @@ const AdminDashboard = () => {
                                                     <div className="w-24 h-24 bg-gray-200 rounded-lg mb-4 flex items-center justify-center">No Image</div>
                                                 )}
                                                 <span className="text-gray-800 font-medium text-center">{item.name}</span>
-                                                <span className="text-sm text-gray-500">Qty: {item.quantity} @ ${item.price}</span>
+                                                <span className="text-sm text-gray-500">Qty: {item.quantity} | Price: ${item.price}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -536,7 +547,17 @@ const AdminDashboard = () => {
                                     >
                                         <option value="">Select Category</option>
                                         {availableCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                        <option value="other">Other (Type manually)</option>
                                     </select>
+                                    {newProduct.category === "other" && (
+                                        <input
+                                            type="text"
+                                            placeholder="Type category manually"
+                                            className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 mt-2"
+                                            value={newProduct.categoryManual || ""}
+                                            onChange={e => setNewProduct({ ...newProduct, categoryManual: e.target.value })}
+                                        />
+                                    )}
                                     
                                     <div className="flex items-center space-x-4 border border-gray-300 rounded-lg px-4 py-2 col-span-2">
                                         <label className="text-gray-600 font-medium">Sizes:</label>
@@ -647,13 +668,15 @@ const AdminDashboard = () => {
                                             <tr key={product._id} className="hover:bg-gray-50 transition-colors duration-200">
                                                 <td className="px-6 py-4">
                                                     {getProductImageUrl(product) ? (
-                                                        <img
+                                                        <Image
+                                                            width={1000}
+                                                            height={1000}
                                                             src={getProductImageUrl(product) as string}
                                                             alt={product.name}
                                                             className="w-16 h-16 object-cover rounded-lg"
                                                         />
                                                     ) : (
-                                                        <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center text-xs">No Img</div>
+                                                        <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center text-xs">No Image</div>
                                                     )}
                                                 </td>
                                                 <td className="px-6 py-4">{product.name}</td>
