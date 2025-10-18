@@ -2,7 +2,6 @@
 
 import ProtectedRoute from "@/app/components/protected/page";
 import { client } from "@/sanity/lib/client";
-import { urlFor } from "@/sanity/lib/image";
 import { Order, Product, Variant } from "@/sanity/lib/types"; 
 import { SignedIn, SignOutButton, useUser } from "@clerk/nextjs";
 import { round } from "lodash";
